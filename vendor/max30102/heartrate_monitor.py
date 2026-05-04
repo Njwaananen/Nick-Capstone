@@ -14,6 +14,8 @@ class HeartRateMonitor:
     - 5 second countdown
     - 20 second recording window
     - Menu/Button Activation
+    - History view from menu
+    - Missing comments need to add more documentation
     """
 
     LOOP_TIME = 0.01
@@ -22,6 +24,7 @@ class HeartRateMonitor:
     COUNTDOWN_TIME = 5
     RESULT_TIME = 10
     BUTTON_PIN = 17
+    READINGS_FILE = "bpm_readings.json"
 
     def __init__(self, print_raw=False, print_result=False):
         self.bpm = 0
@@ -38,6 +41,14 @@ class HeartRateMonitor:
         self.finished = False
         self.countdown_active = False
         self.countdown_value = self.COUNTDOWN_TIME
+
+        self.state = "menu"
+        self.countdown_start = None
+        self.record_start = None
+        self.result_start = None
+        self.final_bpm = 0
+        self.button_down_start = None
+        self.saved_readings = []
 
         # Menu/Button state tracking
         self.state = "menu"
@@ -67,7 +78,27 @@ class HeartRateMonitor:
         self.record_start = None
         self.result_start = None
 
-    def run_sensor(self):
+    def load_readings(self): # Check if the readings file already exists, return if no file
+        if os.path.exists(self.READINGS_FILE):
+            with open(self.READINGS_FILE, "r") as file:
+                return json.load(file)
+        return []
+
+    def save_reading(self, bpm):
+        if bpm <= 0 or >= 160: # Ignore invalid BPMs
+            return
+
+        readings = self.load_readings()
+
+        readings.append({ # Append new readings with BPM and timestamp
+            "bpm": round(float(bpm), 1),
+            "time": datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        })
+
+        with open(self.READINGS_FILE, "w") as file: # Open the file in write mode, overwrites file
+            json.dump(readings, file, indent=4)
+            
+    def run_sensor(self): 
         sensor = MAX30102()
         time.sleep(1) # Delay fix to allow the graph to work correctly I dont understand why
 
@@ -128,12 +159,27 @@ class HeartRateMonitor:
                     self.countdown_active = False
 
                     if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
-                        self.reset_recording_data()
-                        self.state = "countdown"
-                        self.countdown_active = True
-                        self.countdown_start = time.time()
-                        time.sleep(0.3)
+                        if self.button_down_start is None:
+                            self.button_down_start = time.time()
 
+                        elif time.time() - self.button_down_start >= self.HOLD_TIME:
+                            self.saved_readings = self.load_readings()
+                            self.state = "history"
+                            self.button_down_start = None
+                            time.sleep(0.5)
+
+                    else:
+                        if self.button_down_start is not None:
+                            press_time = time.time() - self.button_down_start
+                            self.button_down_start = None
+
+                            if press_time < self.HOLD_TIME:
+                                self.reset_recording_data()
+                                self.state = "countdown"
+                                self.countdown_active = True
+                                self.countdown_start = time.time()
+                                time.sleep(0.3)
+                                
                 # COUNTDOWN
                 elif self.state == "countdown":
                     elapsed = time.time() - self.countdown_start
@@ -231,8 +277,30 @@ class HeartRateMonitor:
                 line.set_data([], [])
                 peak_points.set_data([], [])
                 title_text.set_text("Welcome to Heart Shaped Box")
-                status_text.set_text("Press button to record your BPM")
+                status_text.set_text("PRESS the button to record your BPM, or HOLD to view previous readings")
                 bpm_text.set_text("")
+                ax.set_xlim(0, self.BUFFER_SIZE)
+                ax.set_ylim(0, 1)
+                return line, peak_points, title_text, status_text, bpm_text
+
+            if self.state == "history":
+                line.set_data([], [])
+                peak_points.set_data([], [])
+                title_text.set_text("Previous BPM Readings")
+
+                if len(self.saved_readings) == 0:
+                    status_text.set_text("No saved readings yet")
+                    bpm_text.set_text("Press button to return")
+                else:
+                    recent = self.saved_readings[-5:]
+                    history_lines = []
+
+                    for reading in reversed(recent):
+                        history_lines.append(f"{reading['time']} - {reading['bpm']} BPM")
+
+                    status_text.set_text("\n".join(history_lines))
+                    bpm_text.set_text("Press button to return")
+
                 ax.set_xlim(0, self.BUFFER_SIZE)
                 ax.set_ylim(0, 1)
                 return line, peak_points, title_text, status_text, bpm_text
