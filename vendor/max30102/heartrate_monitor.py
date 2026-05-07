@@ -7,6 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import RPi.GPIO as GPIO
+import json
+import os
+from datetime import datetime
 
 class HeartRateMonitor:
     """
@@ -24,6 +27,7 @@ class HeartRateMonitor:
     COUNTDOWN_TIME = 5
     RESULT_TIME = 10
     BUTTON_PIN = 17
+    HOLD_TIME = 1.5
     READINGS_FILE = "bpm_readings.json"
 
     def __init__(self, print_raw=False, print_result=False):
@@ -85,7 +89,7 @@ class HeartRateMonitor:
         return []
 
     def save_reading(self, bpm):
-        if bpm <= 0 or >= 160: # Ignore invalid BPMs
+        if bpm < 50 or >= 140: # Ignore invalid BPMs
             return
 
         readings = self.load_readings()
@@ -133,10 +137,14 @@ class HeartRateMonitor:
                             )
 
                             if valid_bpm and self.state == "recording": # Smoothes BPM using average of last few values
-                                self.bpms.append(bpm)
-                                if len(self.bpms) > 4:
-                                    self.bpms.pop(0)
-                                self.bpm = np.mean(self.bpms)
+                                if 45 <= bpm <= 180:
+                                    self.bpms.append(bpm)
+                                
+                                    if len(self.bpms) > 8:
+                                        self.bpms.pop(0)
+                                    
+                                    if len(self.bpms) >= 4:
+                                        self.bpm = np.median(self.bpms)
 
                             self.spo2 = spo2 if valid_spo2 else 0
 
