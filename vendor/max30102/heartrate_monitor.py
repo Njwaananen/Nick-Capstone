@@ -64,6 +64,7 @@ class HeartRateMonitor:
         # GPIO button setup
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        
 
         if self.print_raw:
             print("IR, Red")
@@ -167,8 +168,11 @@ class HeartRateMonitor:
                     self.countdown_active = False
 
                     if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
-                        if self.button_down_start is None:
-                            self.button_down_start = time.time()
+                        time.sleep(0.05)
+
+                        if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
+                            if self.button_down_start is None:
+                                self.button_down_start = time.time()
 
                         elif time.time() - self.button_down_start >= self.HOLD_TIME:
                             self.saved_readings = self.load_readings()
