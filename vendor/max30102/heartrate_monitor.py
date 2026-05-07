@@ -289,8 +289,8 @@ class HeartRateMonitor:
             if self.state == "menu":
                 line.set_data([], [])
                 peak_points.set_data([], [])
-                title_text.set_text("Welcome to Heart Shaped Box")
-                status_text.set_text("PRESS the button to record your BPM, or HOLD to view previous readings")
+                title_text.set_text("Welcome to Heart Shaped Box!")
+                status_text.set_text("PRESS the button to record your BPM, HOLD to view history")
                 bpm_text.set_text("")
                 ax.set_xlim(0, self.BUFFER_SIZE)
                 ax.set_ylim(0, 1)
