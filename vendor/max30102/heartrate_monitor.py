@@ -207,6 +207,7 @@ class HeartRateMonitor:
 
                         # Freeze final BPM
                         self.final_bpm = self.bpm
+                        self.save_reading(self.final_bpm)
 
                         self.state = "result"
                         self.result_start = time.time()
