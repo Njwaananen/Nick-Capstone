@@ -178,7 +178,7 @@ class HeartRateMonitor:
                                 self.saved_readings = self.load_readings()
                                 self.state = "history"
                                 self.button_down_start = None
-                                time.sleep(0.5)
+                                time.sleep(1.0)
 
                     else:
                         if self.button_down_start is not None:
@@ -224,8 +224,7 @@ class HeartRateMonitor:
                 # HISTORY
                 elif self.state == "history":
                     if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
-                        self.state = "menu"
-                        time.sleep(0.5)
+                        self.button_down_start = None
 
                 time.sleep(self.LOOP_TIME)
 
