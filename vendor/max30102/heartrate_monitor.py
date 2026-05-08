@@ -174,11 +174,11 @@ class HeartRateMonitor:
                             if self.button_down_start is None:
                                 self.button_down_start = time.time()
 
-                        elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME:
-                            self.saved_readings = self.load_readings()
-                            self.state = "history"
-                            self.button_down_start = None
-                            time.sleep(0.5)
+                            elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME:
+                                self.saved_readings = self.load_readings()
+                                self.state = "history"
+                                self.button_down_start = None
+                                time.sleep(0.5)
 
                     else:
                         if self.button_down_start is not None:
@@ -220,6 +220,12 @@ class HeartRateMonitor:
                 elif self.state == "result":
                     if time.time() - self.result_start >= self.RESULT_TIME:
                         self.state = "menu"
+
+                # HISTORY
+                elif self.state == "history":
+                    if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
+                        self.state = "menu"
+                        time.sleep(0.5)
 
                 time.sleep(self.LOOP_TIME)
 
@@ -287,6 +293,8 @@ class HeartRateMonitor:
                 y = self.ir_data.copy()
 
             if self.state == "menu":
+                status_text.set_fontsize(18)
+                bpm_text.set_fontsize(28)
                 line.set_data([], [])
                 peak_points.set_data([], [])
                 title_text.set_text("Welcome to Heart Shaped Box!")
@@ -311,6 +319,9 @@ class HeartRateMonitor:
                     for reading in reversed(recent):
                         history_lines.append(f"{reading['time']} - {reading['bpm']} BPM")
 
+                    status_text.set_fontsize(12)
+                    bpm_text.set_fontsize(16)
+
                     status_text.set_text("\n".join(history_lines))
                     bpm_text.set_text("Press button to return")
 
@@ -319,6 +330,8 @@ class HeartRateMonitor:
                 return line, peak_points, title_text, status_text, bpm_text
 
             if self.countdown_active:
+                status_text.set_fontsize(18)
+                bpm_text.set_fontsize(28)
                 line.set_data([], [])
                 peak_points.set_data([], [])
                 title_text.set_text("Heart Shaped Box")
@@ -343,11 +356,13 @@ class HeartRateMonitor:
                 peaks_x, peaks_y = self.find_peaks(y_centered)
                 peak_points.set_data(peaks_x, peaks_y)
 
+            status_text.set_fontsize(18)
+            bpm_text.set_fontsize(28)
             if self.running:
                 status_text.set_text("Recording...")
                 bpm_text.set_text(f"BPM: {self.bpm:.1f}" if self.bpm > 0 else "No finger detected")
 
-            elif self.finished:
+            elif self.finished and self.result_start is not None:
                 remaining = max(0, self.RESULT_TIME - int(time.time() - self.result_start))
                 status_text.set_text(f"Returning to menu in {remaining}s")
                 bpm_text.set_text(f"FINAL BPM: {self.final_bpm:.1f}")
