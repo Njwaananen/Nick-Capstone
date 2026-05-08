@@ -174,11 +174,11 @@ class HeartRateMonitor:
                             if self.button_down_start is None:
                                 self.button_down_start = time.time()
 
-                            elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME:
-                                self.saved_readings = self.load_readings()
-                                self.state = "history"
-                                self.button_down_start = None
-                                time.sleep(1.0)
+                           # elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME:
+                           #     self.saved_readings = self.load_readings()
+                           #     self.state = "history"
+                           #     self.button_down_start = None
+                           #     time.sleep(1.0)
 
                     else:
                         if self.button_down_start is not None:
