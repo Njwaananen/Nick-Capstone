@@ -32,7 +32,6 @@ class HeartRateMonitor:
 
     def __init__(self, print_raw=False, print_result=False):
         self.bpm = 0
-        self.spo2 = 0
         self.print_raw = print_raw
         self.print_result = print_result
 
@@ -46,21 +45,14 @@ class HeartRateMonitor:
         self.countdown_active = False
         self.countdown_value = self.COUNTDOWN_TIME
 
-        self.state = "menu"
+        self.state = "menu"  # Menu/Button state tracking
         self.countdown_start = None
         self.record_start = None
         self.result_start = None
         self.final_bpm = 0
         self.button_down_start = None
         self.saved_readings = []
-
-        # Menu/Button state tracking
-        self.state = "menu"
-        self.countdown_start = None
-        self.record_start = None
-        self.result_start = None
-        self.final_bpm = 0
-
+        
         # GPIO button setup
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -71,7 +63,6 @@ class HeartRateMonitor:
 
     def reset_recording_data(self): # Resets recording data after run(s)
         self.bpm = 0
-        self.spo2 = 0
         self.ir_data = []
         self.red_data = []
         self.bpms = []
@@ -90,7 +81,7 @@ class HeartRateMonitor:
         return []
 
     def save_reading(self, bpm):
-        if bpm < 50 or bpm >= 140: # Ignore invalid BPMs
+        if bpm < 40 or bpm >= 150: # Ignore invalid BPMs
             return
 
         readings = self.load_readings()
