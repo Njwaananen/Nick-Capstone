@@ -1,11 +1,11 @@
-# Nicklas Waananen, Capstone Project
+# Nicklas Waananen, CSCU-490 Capstone Project, Professor Shelley Wong, 
 from max30102 import MAX30102
-import hrcalc
-import threading
+import hrcalc # Hear rate/Sp02 calculation done by Max30102 sensor
+import threading # Lets sensor read data in the background while matplotlib updates screen
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation # Draw graph and menu display
 import RPi.GPIO as GPIO
 import json
 import os
@@ -17,35 +17,34 @@ class HeartRateMonitor:
     - 5 second countdown
     - 20 second recording window
     - Menu/Button Activation
-    - History view from menu
-    - Missing comments need to add more documentation
+    - History view from menu HOLD
     """
 
-    LOOP_TIME = 0.01
-    BUFFER_SIZE = 200
+    LOOP_TIME = 0.01 # Hundredth of a second it reads sensor/button checks
+    BUFFER_SIZE = 200 # Sensor samples
     CAPTURE_TIME = 20
     COUNTDOWN_TIME = 5
     RESULT_TIME = 10
     BUTTON_PIN = 17
-    HOLD_TIME = 1.5
+    HOLD_TIME = 1.5 # How long to count GPIO button press as a hold
     READINGS_FILE = "bpm_readings.json"
 
-    def __init__(self, print_raw=False, print_result=False):
+    def __init__(self, print_raw=False, print_result=False): 
         self.bpm = 0
-        self.print_raw = print_raw
+        self.print_raw = print_raw # Flags to output raw sensor values to terminal
         self.print_result = print_result
 
-        self.ir_data = []
+        self.ir_data = [] # Lists are used to store recent sensor readings
         self.red_data = []
         self.bpms = []
 
-        self.lock = threading.Lock()
-        self.running = False
+        self.lock = threading.Lock() # Lock prevents the sensor thread and graph thread from editing/reading data at the same time
+        self.running = False # State flags used by the graph display
         self.finished = False
         self.countdown_active = False
         self.countdown_value = self.COUNTDOWN_TIME
 
-        self.state = "menu"  # Menu/Button state tracking
+        self.state = "menu"  # Menu state tracking
         self.countdown_start = None
         self.record_start = None
         self.result_start = None
@@ -61,7 +60,7 @@ class HeartRateMonitor:
         if self.print_raw:
             print("IR, Red")
 
-    def reset_recording_data(self): # Resets recording data after run(s)
+    def reset_recording_data(self): # Reset only the data needed for a new recording
         self.bpm = 0
         self.ir_data = []
         self.red_data = []
@@ -74,7 +73,7 @@ class HeartRateMonitor:
         self.record_start = None
         self.result_start = None
 
-    def load_readings(self): # Check if the readings file already exists, return if no file
+    def load_readings(self): # Check if the readings file already exists, return empty if no file
         if os.path.exists(self.READINGS_FILE):
             with open(self.READINGS_FILE, "r") as file:
                 return json.load(file)
@@ -86,12 +85,12 @@ class HeartRateMonitor:
 
         readings = self.load_readings()
 
-        readings.append({ # Append new readings with BPM and timestamp
+        readings.append({ # Add newest readings with BPM and timestamp
             "bpm": round(float(bpm), 1),
             "time": datetime.now().strftime("%Y-%m-%d %I:%M %p")
         })
 
-        with open(self.READINGS_FILE, "w") as file: # Open the file in write mode, overwrites file
+        with open(self.READINGS_FILE, "w") as file: # Rewrite Json with updated info
             json.dump(readings, file, indent=4)
             
     def run_sensor(self): 
@@ -100,15 +99,15 @@ class HeartRateMonitor:
 
         try:
             while True:
-                # Always read sensor data in background
+                # Check how many unread samples are available from the sensor FIFO(First in first out) buffer
                 num_bytes = sensor.get_data_present()
 
-                if num_bytes > 0:
+                if num_bytes > 0: # Read all samples
                     while num_bytes > 0:
                         red, ir = sensor.read_fifo()
                         num_bytes -= 1
 
-                        with self.lock:
+                        with self.lock: # Save new readings, graph reads them too
                             self.ir_data.append(ir)
                             self.red_data.append(red)
 
@@ -119,7 +118,7 @@ class HeartRateMonitor:
                         if self.print_raw:
                             print(f"{ir}, {red}")
 
-                    with self.lock:
+                    with self.lock: # Calculates 100 samples
                         if len(self.ir_data) >= 100:
                             ir_window = self.ir_data[-100:]
                             red_window = self.red_data[-100:]
@@ -128,55 +127,53 @@ class HeartRateMonitor:
                                 ir_window, red_window
                             )
 
-                            if valid_bpm and self.state == "recording": # Smoothes BPM using average of last few values
-                                if 45 <= bpm <= 180:
+                            if valid_bpm and self.state == "recording": # Only update BPM during the recording state
+                                if 45 <= bpm <= 180: # Reject extreme bpms
                                     self.bpms.append(bpm)
                                 
-                                    if len(self.bpms) > 8:
+                                    if len(self.bpms) > 8: # Save bpms for smoothing
                                         self.bpms.pop(0)
                                     
                                     if len(self.bpms) >= 4:
                                         self.bpm = np.median(self.bpms)
 
-                            self.spo2 = spo2 if valid_spo2 else 0
-
-                            if np.mean(ir_window) < 50000 and np.mean(red_window) < 50000:
+                            if np.mean(ir_window) < 50000 and np.mean(red_window) < 50000: # Check is made since low and red averages mean nothing on the sensor
                                 self.bpm = 0
                                 if self.print_result and self.state == "recording":
                                     print("No finger detected")
                             else:
                                 if self.print_result and self.state == "recording":
-                                    print(f"BPM: {self.bpm:.1f}, SpO2: {self.spo2}")
+                                    print(f"BPM: {self.bpm:.1f}")
 
                 else:
-                    if self.print_result and self.state == "recording":
+                    if self.print_result and self.state == "recording": # Debug if sensor not providing samples
                         print("num_bytes = 0")
 
-                # MENU
+                # MENU state
                 if self.state == "menu":
                     self.running = False
                     self.finished = False
                     self.countdown_active = False
 
                     if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
-                        time.sleep(0.05)
+                        time.sleep(0.05) # Small debounce delay to avoid false button triggers
 
                         if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
                             if self.button_down_start is None:
                                 self.button_down_start = time.time()
 
-                           # elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME:
-                           #     self.saved_readings = self.load_readings()
-                           #     self.state = "history"
-                           #     self.button_down_start = None
-                           #     time.sleep(1.0)
+                            elif self.button_down_start is not None and time.time() - self.button_down_start >= self.HOLD_TIME: # Controls the history view from menu by holding GPIO button
+                                self.saved_readings = self.load_readings()
+                                self.state = "history"
+                                self.button_down_start = None
+                                time.sleep(1.0)
 
                     else:
-                        if self.button_down_start is not None:
+                        if self.button_down_start is not None: # Decides if it was press or not
                             press_time = time.time() - self.button_down_start
                             self.button_down_start = None
 
-                            if press_time < self.HOLD_TIME:
+                            if press_time < self.HOLD_TIME: # Single press starts new recording
                                 self.reset_recording_data()
                                 self.state = "countdown"
                                 self.countdown_active = True
@@ -188,7 +185,7 @@ class HeartRateMonitor:
                     elapsed = time.time() - self.countdown_start
                     self.countdown_value = max(1, self.COUNTDOWN_TIME - int(elapsed))
 
-                    if elapsed >= self.COUNTDOWN_TIME:
+                    if elapsed >= self.COUNTDOWN_TIME: # Countdown finish, then record
                         self.countdown_active = False
                         self.running = True
                         self.state = "recording"
@@ -196,11 +193,11 @@ class HeartRateMonitor:
 
                 # RECORDING
                 elif self.state == "recording":
-                    if time.time() - self.record_start >= self.CAPTURE_TIME:
+                    if time.time() - self.record_start >= self.CAPTURE_TIME: # Stop recording a
                         self.running = False
                         self.finished = True
 
-                        # Freeze final BPM
+                        # Freeze final BPM and display
                         self.final_bpm = self.bpm
                         self.save_reading(self.final_bpm)
 
@@ -209,51 +206,51 @@ class HeartRateMonitor:
 
                 # RESULT
                 elif self.state == "result":
-                    if time.time() - self.result_start >= self.RESULT_TIME:
+                    if time.time() - self.result_start >= self.RESULT_TIME: # After result, return to menu
                         self.state = "menu"
 
                 # HISTORY
                 elif self.state == "history":
-                    if GPIO.input(self.BUTTON_PIN) == GPIO.LOW:
+                    if GPIO.input(self.BUTTON_PIN) == GPIO.LOW: # Long press for history
                         self.button_down_start = None
 
                 time.sleep(self.LOOP_TIME)
 
         finally:
             sensor.shutdown()
-            GPIO.cleanup()
+            GPIO.cleanup() # Cleanup when program exits
 
     def start_sensor(self):
-        self._thread = threading.Thread(target=self.run_sensor, daemon=True)
+        self._thread = threading.Thread(target=self.run_sensor, daemon=True) # Start run_sensor in a background daemon thread
         self._thread.start()
 
-    def stop_sensor(self, timeout=2.0):
+    def stop_sensor(self, timeout=2.0): # Wait for the sensor thread to stop when program exits
         if hasattr(self, "_thread"):
             self._thread.join(timeout)
 
-    def find_peaks(self, data):
+    def find_peaks(self, data): # Find simple local peaks in the waveform for graph
         peaks_x = []
         peaks_y = []
 
-        if len(data) < 3:
+        if len(data) < 3: # Needs 3 points to compare a point to left/right
             return peaks_x, peaks_y
 
         threshold = np.mean(data)
 
-        for i in range(1, len(data) - 1):
+        for i in range(1, len(data) - 1): # Math for marking peaks if its higher than neighbors
             if data[i] > data[i - 1] and data[i] > data[i + 1] and data[i] > threshold:
                 peaks_x.append(i)
                 peaks_y.append(data[i])
 
         return peaks_x, peaks_y
 
-    def plot_realtime(self):
+    def plot_realtime(self): # Matplotlib screen for menu/graph/countdown
         plt.style.use("dark_background")
         fig, ax = plt.subplots(figsize=(11, 6))
         fig.patch.set_facecolor("black")
         ax.set_facecolor("black")
 
-        line, = ax.plot([], [], lw=2)
+        line, = ax.plot([], [], lw=2) # Main waveform line and red peak markers
         peak_points, = ax.plot([], [], "ro", markersize=4)
 
         title_text = ax.text(0.5, 0.94, "", transform=ax.transAxes,
@@ -270,7 +267,7 @@ class HeartRateMonitor:
         ax.set_ylabel("IR Value")
         ax.grid(True, alpha=0.2)
 
-        def init():
+        def init(): # Set the initial blank graph state before animation starts
             line.set_data([], [])
             peak_points.set_data([], [])
             title_text.set_text("Heart Shaped Box")
@@ -280,7 +277,7 @@ class HeartRateMonitor:
 
         def update(frame):
             with self.lock:
-                y = self.ir_data.copy()
+                y = self.ir_data.copy() # Copy IR data from the sensor thread
 
             if self.state == "menu":
                 status_text.set_fontsize(18)
@@ -294,7 +291,7 @@ class HeartRateMonitor:
                 ax.set_ylim(0, 1)
                 return line, peak_points, title_text, status_text, bpm_text
 
-            if self.state == "history":
+            if self.state == "history": # History screen
                 line.set_data([], [])
                 peak_points.set_data([], [])
                 title_text.set_text("Previous BPM Readings")
@@ -303,7 +300,7 @@ class HeartRateMonitor:
                     status_text.set_text("No saved readings yet")
                     bpm_text.set_text("Press button to return")
                 else:
-                    recent = self.saved_readings[-5:]
+                    recent = self.saved_readings[-10:] # Show 10 newest saved readings.
                     history_lines = []
 
                     for reading in reversed(recent):
@@ -319,7 +316,7 @@ class HeartRateMonitor:
                 ax.set_ylim(0, 1)
                 return line, peak_points, title_text, status_text, bpm_text
 
-            if self.countdown_active:
+            if self.countdown_active: # Countdown screen before recording starts
                 status_text.set_fontsize(18)
                 bpm_text.set_fontsize(28)
                 line.set_data([], [])
@@ -331,46 +328,46 @@ class HeartRateMonitor:
                 ax.set_ylim(0, 1)
                 return line, peak_points, title_text, status_text, bpm_text
 
-            x = list(range(len(y)))
-            y_centered = np.array(y) - np.mean(y) if len(y) > 0 else np.array([0])
+            x = list(range(len(y))) # Convert sensor data into x/y value for plot(s)
+            y_centered = np.array(y) - np.mean(y) if len(y) > 0 else np.array([0]) # Remove large direct current offset for visibilty
 
             line.set_data(x, y_centered)
 
             if len(y) > 0:
                 ymin = float(np.min(y_centered))
                 ymax = float(np.max(y_centered))
-                padding = max((ymax - ymin) * 0.2, 1000)
+                padding = max((ymax - ymin) * 0.2, 1000) # Padding for waveform not hitting the top/bottom
                 ax.set_xlim(0, len(y))
                 ax.set_ylim(ymin - padding, ymax + padding)
 
-                peaks_x, peaks_y = self.find_peaks(y_centered)
+                peaks_x, peaks_y = self.find_peaks(y_centered) # Mark peaks on graph
                 peak_points.set_data(peaks_x, peaks_y)
 
-            status_text.set_fontsize(18)
+            status_text.set_fontsize(18) # Recording display
             bpm_text.set_fontsize(28)
             if self.running:
                 status_text.set_text("Recording...")
                 bpm_text.set_text(f"BPM: {self.bpm:.1f}" if self.bpm > 0 else "No finger detected")
 
-            elif self.finished and self.result_start is not None:
+            elif self.finished and self.result_start is not None: # Result display after the recording ends
                 remaining = max(0, self.RESULT_TIME - int(time.time() - self.result_start))
                 status_text.set_text(f"Returning to menu in {remaining}s")
                 bpm_text.set_text(f"FINAL BPM: {self.final_bpm:.1f}")
 
             return line, peak_points, title_text, status_text, bpm_text
 
-        self.ani = FuncAnimation(fig, update, init_func=init, interval=50)
+        self.ani = FuncAnimation(fig, update, init_func=init, interval=50) # FuncAnimation repeatedly calls update() to refresh the graph/screen
         plt.tight_layout()
         plt.show()
 
 
 if __name__ == "__main__":
-    hrm = HeartRateMonitor(print_raw=False, print_result=True)
-
+    hrm = HeartRateMonitor(print_raw=False, print_result=True) # Create the monitor object, 
+ # Print_result = true utilized because it prints bpm/status message(s) to the terminal
     try:
-        hrm.start_sensor()
+        hrm.start_sensor() # Start sensor thread first, then open the live display
         hrm.plot_realtime()
     except KeyboardInterrupt:
         print("Stopping...")
     finally:
-        hrm.stop_sensor()
+        hrm.stop_sensor() # Try to stop the sensor thread smoothly when program closes
