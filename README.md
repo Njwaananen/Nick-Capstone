@@ -12,9 +12,6 @@ The heartrate_monitor.py code was originally based on:
 
 Code has been modified it so the sensor no longer relies on the interrupt pin, but will instead continuously check the FIFO read/write pointers to pull data directly from the sensor. I also added a threaded system to make the sensor easier to start, stop, and manage during runtime.
 
-The original project itself was a Python version of Maxim’s Arduino reference design:
-[Maxim Integrated Arduino reference design](https://github.com/MaximIntegratedRefDesTeam/RD117_ARDUINO/?utm_source=chatgpt.com)
-
 ## Setup
 
 This project requires a few external Python libraries, mainly `smbus` and `numpy`.
