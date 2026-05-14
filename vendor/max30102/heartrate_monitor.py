@@ -25,7 +25,7 @@ class HeartRateMonitor:
     CAPTURE_TIME = 20
     COUNTDOWN_TIME = 5
     RESULT_TIME = 10
-    BUTTON_PIN = 17
+    BUTTON_PIN = 17 # The actual pin the cable is connected to on the board
     HOLD_TIME = 1.5 # How long to count GPIO button press as a hold
     READINGS_FILE = "bpm_readings.json"
 
